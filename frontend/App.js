@@ -1,11 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+
+// Importamos la función que conecta con tu backend (ajustá la ruta si tu api.js está en /src/services/api)
+//import { scanProductImage } from './api';
+import { scanProductImage } from './src/services/api'; 
 
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   const [showCamera, setShowCamera] = useState(false);
-  const [photoUri, setPhotoUri] = useState(null);
+  const [photoData, setPhotoData] = useState(null); // Guarda { uri, base64 }
   const [loading, setLoading] = useState(false);
   const cameraRef = useRef(null);
 
@@ -22,15 +26,41 @@ export default function App() {
     );
   }
 
+  // Tomar la foto enfocado en el cuadro nutricional
   const takePicture = async () => {
-    if (cameraRef.current) {
+    if (cameraRef.current && !loading) {
+      try {
+        setLoading(true);
+        const options = { quality: 0.85, base64: true, skipProcessing: false };
+        const photo = await cameraRef.current.takePictureAsync(options);
+        
+        setPhotoData(photo);
+        setShowCamera(false);
+      } catch (error) {
+        Alert.alert("Error", "No se pudo tomar la fotografía. Intentalo de nuevo.");
+        console.error("Error al capturar foto:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Enviar la imagen capturada en base64 al backend
+  const handleAnalyze = async () => {
+    if (!photoData?.base64) {
+      Alert.alert("Error", "No hay imagen disponible para analizar.");
+      return;
+    }
+    try {
       setLoading(true);
-      const options = { quality: 0.8, base64: true };
-      const photo = await cameraRef.current.takePictureAsync(options);
-      setPhotoUri(photo.uri);
-      setShowCamera(false);
+      const resultado = await scanProductImage(photoData.base64);
+      console.log("Respuesta del servidor:", resultado);
+      Alert.alert("Éxito", "El servidor recibió y procesó la imagen correctamente.");
+    } catch (error) {
+      console.error("Error al enviar foto:", error);
+      Alert.alert("Error de conexión", "No se pudo conectar con el servidor en 192.168.0.17:3000");
+    } finally {
       setLoading(false);
-      console.log("Foto capturada con éxito:", photo.uri);
     }
   };
 
@@ -39,42 +69,74 @@ export default function App() {
       {!showCamera ? (
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <Text style={styles.title}>NutriScan App 🥗</Text>
-          <Text style={styles.subtitle}>Análisis de Información Nutricional</Text>
+          <Text style={styles.subtitle}>Escáner de Información Nutricional</Text>
 
-          {photoUri && (
+          {photoData ? (
             <View style={styles.previewContainer}>
-              <Text style={styles.previewTitle}>Captura actual:</Text>
-              <Image source={{ uri: photoUri }} style={styles.previewImage} />
+              <Text style={styles.previewTitle}>Captura lista para analizar:</Text>
+              <Image source={{ uri: photoData.uri }} style={styles.previewImage} />
+              
+              <TouchableOpacity 
+                style={[styles.button, styles.analyzeButton]}
+                onPress={handleAnalyze}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>⚡ Analizar Cuadro Nutricional</Text>
+                )}
+              </TouchableOpacity>
             </View>
-          )}
+          ) : null}
 
           <TouchableOpacity 
             style={styles.button}
             onPress={() => setShowCamera(true)}
+            disabled={loading}
           >
-            <Text style={styles.buttonText}>📸 Fotografiar Tabla Nutricional</Text>
+            <Text style={styles.buttonText}>
+              {photoData ? "📸 Tomar otra foto" : "📸 Fotografiar Tabla Nutricional"}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       ) : (
         <View style={styles.cameraContainer}>
-          {/* Cámara sin componentes adentro */}
-          <CameraView style={StyleSheet.absoluteFillObject} facing="back" ref={cameraRef} />
+          {/* Cámara limpia sin hijos adentro */}
+          <CameraView 
+            style={StyleSheet.absoluteFillObject} 
+            facing="back" 
+            ref={cameraRef}
+            animateShutter={true}
+          />
 
-          {/* Capa con la guía de encuadre (posicionada encima de forma absoluta) */}
+          {/* Guía visual overlay posicionado en capa superior */}
           <View style={styles.overlay} pointerEvents="none">
             <View style={styles.scanFrame}>
-              <Text style={styles.frameText}>Encuadrá aquí el cuadro nutricional</Text>
+              <Text style={styles.frameText}>Centrá la tabla nutricional dentro del cuadro</Text>
             </View>
           </View>
 
-          {/* Controles de la cámara (cancelar y tomar foto) */}
+          {/* Controles de la cámara */}
           <View style={styles.controlsContainer}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setShowCamera(false)}>
+            <TouchableOpacity 
+              style={styles.closeButton} 
+              onPress={() => setShowCamera(false)}
+              disabled={loading}
+            >
               <Text style={styles.buttonText}>Cancelar</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.captureButton} onPress={takePicture} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <View style={styles.innerCaptureButton} />}
+            <TouchableOpacity 
+              style={styles.captureButton} 
+              onPress={takePicture} 
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#007AFF" size="large" />
+              ) : (
+                <View style={styles.innerCaptureButton} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -86,19 +148,20 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f7' },
   scrollContainer: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  cameraContainer: { flex: 1, position: 'relative' },
+  cameraContainer: { flex: 1, position: 'relative', backgroundColor: '#000' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#8e8e93', textAlign: 'center', marginBottom: 24 },
-  button: { backgroundColor: '#007AFF', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, marginTop: 10 },
+  button: { backgroundColor: '#007AFF', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, marginTop: 10, width: '100%', alignItems: 'center' },
+  analyzeButton: { backgroundColor: '#34C759', marginTop: 15 },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 16, textAlign: 'center' },
-  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
-  scanFrame: { width: '85%', height: '50%', borderWidth: 2, borderColor: '#007AFF', borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)' },
-  frameText: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 6, fontSize: 13 },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
+  scanFrame: { width: '85%', height: '55%', borderWidth: 2, borderColor: '#34C759', borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)' },
+  frameText: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.7)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, fontSize: 13, textAlign: 'center' },
   controlsContainer: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
   closeButton: { backgroundColor: '#FF3B30', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 },
-  captureButton: { width: 70, height: 70, borderRadius: 35, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
-  innerCaptureButton: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#fff' },
+  captureButton: { width: 74, height: 74, borderRadius: 37, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
+  innerCaptureButton: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff' },
   previewContainer: { width: '100%', alignItems: 'center', marginBottom: 20 },
   previewTitle: { fontSize: 14, color: '#8e8e93', marginBottom: 8 },
-  previewImage: { width: 250, height: 250, borderRadius: 12, resizeMode: 'cover' }
+  previewImage: { width: 260, height: 320, borderRadius: 12, resizeMode: 'cover' }
 });
