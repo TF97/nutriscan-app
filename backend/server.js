@@ -70,10 +70,10 @@ function parseGeminiJson(text) {
   return JSON.parse(cleaned);
 }
 
+// Modelos vigentes de la API de Google Gemini
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-flash-latest",
-  "gemini-2.0-flash",
+  "gemini-3.6-flash",
+  "gemini-3.6-pro"
 ];
 
 function stripDataUrl(image) {
@@ -82,7 +82,6 @@ function stripDataUrl(image) {
   return match ? match[1] : image;
 }
 
-// Remplaza la función isModelUnavailableError existente por esta versión mejorada:
 function isModelUnavailableError(error) {
   const msg = String(error?.message || error || "").toLowerCase();
   const status = error?.status || error?.statusCode;
@@ -104,6 +103,8 @@ async function generateScanContent(imageData, mimeType) {
 
   for (const modelName of GEMINI_MODELS) {
     try {
+      console.log(`Intentando analizar con el modelo: ${modelName}...`);
+
       const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
@@ -125,10 +126,10 @@ async function generateScanContent(imageData, mimeType) {
       return { result, modelName };
     } catch (error) {
       lastError = error;
+      console.warn(`Falló ${modelName} (${error.status || error.message}), probando siguiente modelo...`);
       if (!isModelUnavailableError(error)) {
         throw error;
       }
-      console.warn(`Modelo ${modelName} no disponible, probando fallback...`);
     }
   }
 
