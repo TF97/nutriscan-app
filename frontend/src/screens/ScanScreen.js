@@ -17,14 +17,14 @@ export default function ScanScreen({ navigation }) {
           return;
         }
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
           quality: 0.8,
           base64: true,
         });
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
           quality: 0.8,
           base64: true,
@@ -37,6 +37,7 @@ export default function ScanScreen({ navigation }) {
         processImage(result.assets[0].base64);
       }
     } catch (error) {
+      console.error(error);
       Alert.alert('Error', 'No se pudo cargar la imagen.');
     }
   };
@@ -46,14 +47,16 @@ export default function ScanScreen({ navigation }) {
     try {
       const response = await scanProductImage(base64);
       setLoading(false);
+      
       if (response.success) {
+        // Redirige a la pantalla de resultados enviando los datos obtenidos
         navigation.navigate('Result', { data: response });
       } else {
         Alert.alert('Error de análisis', response.error || 'No se pudo analizar el producto.');
       }
     } catch (error) {
       setLoading(false);
-      Alert.alert('Error de conexión', 'Verifica que el servidor Node.js esté encendido.');
+      Alert.alert('Error de conexión', 'Verifica que el servidor Node.js esté encendido y que la IP en api.js sea correcta.');
     }
   };
 
