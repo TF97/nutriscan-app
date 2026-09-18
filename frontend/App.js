@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -29,8 +29,99 @@ const formatSafeText = (val, fallback = '') => {
   return fallback;
 };
 
+// Subcomponente de Cámara con el recuadro claro de enfoque
+const CameraScreen = memo(({ onCapture, onClose, loading }) => {
+  const cameraRef = useRef(null);
+
+  const takePicture = async () => {
+    if (cameraRef.current && !loading) {
+      try {
+        const options = { quality: 0.85, base64: true, skipProcessing: false };
+        const photo = await cameraRef.current.takePictureAsync(options);
+        onCapture(photo);
+      } catch (error) {
+        Alert.alert('Error', 'No se pudo tomar la fotografía.');
+      }
+    }
+  };
+
+  return (
+    <View style={styles.cameraContainer}>
+      <CameraView style={StyleSheet.absoluteFillObject} facing="back" ref={cameraRef} />
+      
+      {/* Superposición con recuadro claro de enfoque */}
+      <View style={styles.cameraOverlay} pointerEvents="box-none">
+        <View style={styles.cameraPreviewContainer}>
+          <View style={styles.cameraGuideOverlay}>
+            <Text style={styles.cameraGuideText}>
+              Alinea la tabla nutricional aquí
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.controlsContainer}>
+        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <Text style={styles.buttonText}>Cancelar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.captureButton} onPress={takePicture} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#007AFF" size="large" />
+          ) : (
+            <View style={styles.innerCaptureButton} />
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
+
+// Componentes memoizados para evitar renders pesados en las listas
+const RankingItem = memo(({ item, index }) => {
+  const nombreProd = formatSafeText(item?.nombre || item, `Producto ${index + 1}`);
+  const catProd = formatSafeText(item?.categoria, 'General');
+  const clasificacionText = item?.evaluacionCAA?.clasificacion || null;
+  const badgeColor = item?.evaluacionCAA?.color || '#059669';
+
+  return (
+    <View style={styles.itemCard}>
+      <View style={styles.itemHeader}>
+        <View style={styles.rankBadge}>
+          <Text style={styles.rankBadgeText}>#{index + 1}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.itemTitle}>{nombreProd}</Text>
+          <Text style={styles.itemCategory}>Categoría: {catProd}</Text>
+        </View>
+      </View>
+      {clasificacionText && (
+        <View style={[styles.miniBadge, { backgroundColor: `${badgeColor}22` }]}>
+          <Text style={[styles.miniBadgeText, { color: badgeColor }]}>
+            {clasificacionText}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+});
+
+const HistorialItem = memo(({ item, index }) => {
+  const nombreProd = formatSafeText(item?.nombre || item, `Escaneo #${index + 1}`);
+  const catProd = formatSafeText(item?.categoria, 'General');
+  const fecha = item?.fechaCreacion
+    ? new Date(item.fechaCreacion).toLocaleDateString()
+    : null;
+
+  return (
+    <View style={styles.itemCard}>
+      <Text style={styles.itemTitle}>{nombreProd}</Text>
+      <Text style={styles.itemCategory}>Categoría: {catProd}</Text>
+      {fecha && <Text style={styles.dateText}>Escaneado: {fecha}</Text>}
+    </View>
+  );
+});
+
 export default function App() {
-  // Media queries mediante Hook de pantalla
   const { width: windowWidth } = useWindowDimensions();
   const isSmallDevice = windowWidth < 380;
   const isTablet = windowWidth > 600;
@@ -42,69 +133,117 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('escaner');
 
-  // Estados de interfaz y desplegables
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNutritionalDetails, setShowNutritionalDetails] = useState(false);
 
-  // Estados de Listas
   const [categorias, setCategorias] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [rankingList, setRankingList] = useState([]);
   const [historialList, setHistorialList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
-  const cameraRef = useRef(null);
+  const isMounted = useRef(true);
 
   useEffect(() => {
+    isMounted.current = true;
+
+    const cargarCategorias = async () => {
+      try {
+        const res = await getCategorias();
+        if (isMounted.current && res?.success && Array.isArray(res?.categorias)) {
+          setCategorias(res.categorias);
+        }
+      } catch (e) {
+        console.log('Error al cargar categorias', e);
+      }
+    };
+
     cargarCategorias();
+
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
-  const cargarCategorias = async () => {
-    try {
-      const res = await getCategorias();
-      if (res?.success && Array.isArray(res?.categorias)) {
-        setCategorias(res.categorias);
-      }
-    } catch (e) {
-      console.log('Error al cargar categorias', e);
-    }
-  };
-
-  const cargarRanking = async (cat = '') => {
+  const cargarRanking = useCallback(async (cat = '') => {
     setLoadingList(true);
     setSelectedCategory(cat);
     try {
       const res = await getRanking(cat);
-      if (res?.success) {
+      if (isMounted.current && res?.success) {
         setRankingList(res.productos || res.data || []);
       }
     } catch (e) {
       console.log('Error al cargar ranking', e);
     } finally {
-      setLoadingList(false);
+      if (isMounted.current) setLoadingList(false);
     }
-  };
+  }, []);
 
-  const cargarHistorial = async () => {
+  const cargarHistorial = useCallback(async () => {
     setLoadingList(true);
     try {
       const res = await getHistorial();
-      if (res?.success) {
+      if (isMounted.current && res?.success) {
         setHistorialList(res.productos || res.data || []);
       }
     } catch (e) {
       console.log('Error al cargar historial', e);
     } finally {
-      setLoadingList(false);
+      if (isMounted.current) setLoadingList(false);
     }
-  };
+  }, []);
 
-  const resetToHome = () => {
+  const resetToHome = useCallback(() => {
     setPhotoData(null);
     setAnalysisResult(null);
     setShowCamera(false);
     setActiveTab('escaner');
     setShowNutritionalDetails(false);
+  }, []);
+
+  const handleCapturePhoto = useCallback((photo) => {
+    setPhotoData(photo);
+    setAnalysisResult(null);
+    setShowCamera(false);
+  }, []);
+
+  const handleAnalyze = async () => {
+    if (!photoData?.base64) return;
+    try {
+      setLoading(true);
+      const resultado = await scanProductImage(photoData.base64);
+      if (isMounted.current) {
+        if (resultado?.success) {
+          setAnalysisResult(resultado);
+        } else {
+          Alert.alert('Error de análisis', resultado?.error || 'No se pudo analizar la imagen.');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error de conexión', 'Verifica la conexión con el servidor Node.js.');
+    } finally {
+      if (isMounted.current) setLoading(false);
+    }
+  };
+
+  const renderResumenCAA = (resumen) => {
+    if (!resumen) return null;
+    if (typeof resumen === 'string') return <Text style={styles.evaluationSummary}>{resumen}</Text>;
+    if (Array.isArray(resumen)) {
+      return resumen.map((item, index) => {
+        const textoItem =
+          typeof item === 'object'
+            ? item.texto || item.mensaje || `${item.nutriente || ''}: ${item.tipo || ''}`
+            : String(item);
+        return (
+          <Text key={item.id || index} style={styles.evaluationSummaryItem}>
+            • {textoItem}
+          </Text>
+        );
+      });
+    }
+    return null;
   };
 
   if (!permission) return <View style={styles.container} />;
@@ -122,60 +261,6 @@ export default function App() {
     );
   }
 
-  const takePicture = async () => {
-    if (cameraRef.current && !loading) {
-      try {
-        setLoading(true);
-        const options = { quality: 0.85, base64: true, skipProcessing: false };
-        const photo = await cameraRef.current.takePictureAsync(options);
-        setPhotoData(photo);
-        setAnalysisResult(null);
-        setShowCamera(false);
-      } catch (error) {
-        Alert.alert('Error', 'No se pudo tomar la fotografía.');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleAnalyze = async () => {
-    if (!photoData?.base64) return;
-    try {
-      setLoading(true);
-      const resultado = await scanProductImage(photoData.base64);
-      if (resultado?.success) {
-        setAnalysisResult(resultado);
-      } else {
-        Alert.alert('Error de análisis', resultado?.error || 'No se pudo analizar la imagen.');
-      }
-    } catch (error) {
-      Alert.alert('Error de conexión', 'Verifica la conexión con el servidor Node.js.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderResumenCAA = (resumen) => {
-    if (!resumen) return null;
-    if (typeof resumen === 'string') return <Text style={styles.evaluationSummary}>{resumen}</Text>;
-    if (Array.isArray(resumen)) {
-      return resumen.map((item, index) => {
-        const textoItem =
-          typeof item === 'object'
-            ? item.texto || item.mensaje || `${item.nutriente || ''}: ${item.tipo || ''}`
-            : String(item);
-        return (
-          <Text key={index} style={styles.evaluationSummaryItem}>
-            • {textoItem}
-          </Text>
-        );
-      });
-    }
-    return null;
-  };
-
-  // Cálculo responsivo dinámico
   const responsivePadding = isSmallDevice ? 12 : isTablet ? 28 : 18;
   const responsiveTitleSize = isSmallDevice ? 18 : isTablet ? 26 : 22;
 
@@ -240,27 +325,11 @@ export default function App() {
 
       {/* CÁMARA */}
       {showCamera ? (
-        <View style={styles.cameraContainer}>
-          <CameraView style={StyleSheet.absoluteFillObject} facing="back" ref={cameraRef} />
-          <View style={styles.cameraOverlay} pointerEvents="box-none">
-            <View style={styles.scanFrame}>
-              <Text style={styles.frameText}>Centrá la tabla nutricional aquí</Text>
-            </View>
-          </View>
-
-          <View style={styles.controlsContainer}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setShowCamera(false)}>
-              <Text style={styles.buttonText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.captureButton} onPress={takePicture} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color="#007AFF" size="large" />
-              ) : (
-                <View style={styles.innerCaptureButton} />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+        <CameraScreen
+          onCapture={handleCapturePhoto}
+          onClose={() => setShowCamera(false)}
+          loading={loading}
+        />
       ) : (
         <ScrollView
           contentContainerStyle={[
@@ -272,7 +341,6 @@ export default function App() {
           {/* SECCIÓN ESCÁNER */}
           {activeTab === 'escaner' && (
             <View style={styles.sectionContainer}>
-              {/* Previsualización de la foto */}
               {photoData && !analysisResult && (
                 <View style={styles.card}>
                   <Text style={styles.previewTitle}>Captura lista para evaluar:</Text>
@@ -305,7 +373,6 @@ export default function App() {
               {/* RESULTADO DEL ANÁLISIS */}
               {analysisResult && (
                 <View style={styles.card}>
-                  {/* 1. VISTA PRINCIPAL: NOMBRE Y SALUDABLE O NO */}
                   <View style={styles.mainResultBox}>
                     <Text style={styles.productTitle}>
                       {formatSafeText(analysisResult.nombre, 'Producto Escaneado')}
@@ -337,15 +404,9 @@ export default function App() {
                         </Text>
                       </View>
                     )}
-
-                    {analysisResult.evaluacionCAA && (
-                      <View style={styles.evaluationBox}>
-                        {renderResumenCAA(analysisResult.evaluacionCAA.resumen)}
-                      </View>
-                    )}
                   </View>
 
-                  {/* 2. BOTÓN DESPLEGABLE CON LA INFORMACIÓN NUTRICIONAL */}
+                  {/* BOTÓN DESPLEGABLE */}
                   <TouchableOpacity
                     style={styles.accordionButton}
                     activeOpacity={0.7}
@@ -358,8 +419,16 @@ export default function App() {
                     </Text>
                   </TouchableOpacity>
 
+                  {/* CONTENIDO DESPLEGADO */}
                   {showNutritionalDetails && (
                     <View style={styles.dropdownContent}>
+                      {analysisResult.evaluacionCAA && (
+                        <View style={[styles.evaluationBox, { marginBottom: 14 }]}>
+                          <Text style={styles.nutrientSectionTitle}>📋 Análisis Detallado:</Text>
+                          {renderResumenCAA(analysisResult.evaluacionCAA.resumen)}
+                        </View>
+                      )}
+
                       <Text style={styles.nutrientSectionTitle}>📊 Tabla Nutricional (Valores):</Text>
                       {analysisResult.nutrientes ? (
                         <View style={styles.tableContainer}>
@@ -448,9 +517,10 @@ export default function App() {
                 </TouchableOpacity>
                 {categorias.map((cat, idx) => {
                   const labelCat = formatSafeText(cat, `Cat ${idx + 1}`);
+                  const categoryKey = typeof cat === 'object' && cat.id ? cat.id : `${labelCat}-${idx}`;
                   return (
                     <TouchableOpacity
-                      key={idx}
+                      key={categoryKey}
                       style={[styles.chip, selectedCategory === labelCat && styles.activeChip]}
                       onPress={() => cargarRanking(labelCat)}
                     >
@@ -465,33 +535,9 @@ export default function App() {
               {loadingList ? (
                 <ActivityIndicator color="#0284C7" size="large" style={{ marginTop: 20 }} />
               ) : rankingList.length > 0 ? (
-                rankingList.map((item, index) => {
-                  const nombreProd = formatSafeText(item?.nombre || item, `Producto ${index + 1}`);
-                  const catProd = formatSafeText(item?.categoria, 'General');
-                  let clasificacionText = item?.evaluacionCAA?.clasificacion || null;
-                  let badgeColor = item?.evaluacionCAA?.color || '#059669';
-
-                  return (
-                    <View key={index} style={styles.itemCard}>
-                      <View style={styles.itemHeader}>
-                        <View style={styles.rankBadge}>
-                          <Text style={styles.rankBadgeText}>#{index + 1}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle}>{nombreProd}</Text>
-                          <Text style={styles.itemCategory}>Categoría: {catProd}</Text>
-                        </View>
-                      </View>
-                      {clasificacionText && (
-                        <View style={[styles.miniBadge, { backgroundColor: `${badgeColor}22` }]}>
-                          <Text style={[styles.miniBadgeText, { color: badgeColor }]}>
-                            {clasificacionText}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  );
-                })
+                rankingList.map((item, index) => (
+                  <RankingItem key={item.id || item._id || index} item={item} index={index} />
+                ))
               ) : (
                 <Text style={styles.emptyText}>No hay productos registrados en esta categoría.</Text>
               )}
@@ -505,22 +551,9 @@ export default function App() {
               {loadingList ? (
                 <ActivityIndicator color="#0284C7" size="large" style={{ marginTop: 20 }} />
               ) : historialList.length > 0 ? (
-                historialList.map((item, index) => {
-                  // Solución al error "Objects are not valid as a React child"
-                  const nombreProd = formatSafeText(item?.nombre || item, `Escaneo #${index + 1}`);
-                  const catProd = formatSafeText(item?.categoria, 'General');
-                  const fecha = item?.fechaCreacion
-                    ? new Date(item.fechaCreacion).toLocaleDateString()
-                    : null;
-
-                  return (
-                    <View key={index} style={styles.itemCard}>
-                      <Text style={styles.itemTitle}>{nombreProd}</Text>
-                      <Text style={styles.itemCategory}>Categoría: {catProd}</Text>
-                      {fecha && <Text style={styles.dateText}>Escaneado: {fecha}</Text>}
-                    </View>
-                  );
-                })
+                historialList.map((item, index) => (
+                  <HistorialItem key={item.id || item._id || index} item={item} index={index} />
+                ))
               ) : (
                 <Text style={styles.emptyText}>Aún no has escaneado productos.</Text>
               )}
@@ -529,7 +562,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* MENÚ FLOTANTE ACCIONES */}
+      {/* MODAL ACCIONES */}
       <Modal
         visible={isMenuOpen}
         transparent={true}
@@ -599,25 +632,39 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 12, color: '#64748B', fontWeight: '600' },
   activeTabText: { color: '#0284C7', fontWeight: '700' },
 
-  /* CÁMARA */
+  /* CÁMARA Y MARCO CLARO DE ESCANEO */
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
-  scanFrame: {
-    width: '82%',
-    height: '50%',
+  cameraPreviewContainer: {
+    width: '88%',
+    height: 320,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderWidth: 2,
-    borderColor: '#38BDF8',
-    borderRadius: 16,
+    borderColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 10,
+    elevation: 4,
   },
-  frameText: {
-    color: '#fff',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    paddingVertical: 6,
+  cameraGuideOverlay: {
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     paddingHorizontal: 12,
-    borderRadius: 8,
-    fontSize: 13,
+  },
+  cameraGuideText: {
+    color: '#1E293B',
+    fontWeight: '700',
+    fontSize: 14,
+    textAlign: 'center',
   },
   controlsContainer: {
     position: 'absolute',
@@ -698,7 +745,7 @@ const styles = StyleSheet.create({
   evaluationSummary: { fontSize: 13, color: '#334155', lineHeight: 18, textAlign: 'center' },
   evaluationSummaryItem: { fontSize: 13, color: '#334155', lineHeight: 18, marginBottom: 2 },
 
-  /* BOTÓN ACCORDEÓN DESPLEGABLE */
+  /* ACCORDEÓN DESPLEGABLE */
   accordionButton: {
     backgroundColor: '#F0F9FF',
     paddingVertical: 14,
