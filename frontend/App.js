@@ -29,7 +29,7 @@ const formatSafeText = (val, fallback = '') => {
   return fallback;
 };
 
-// Subcomponente de Cámara con el recuadro claro de enfoque
+// Subcomponente de Cámara TRANSPARENTE para ver el producto claramente
 const CameraScreen = memo(({ onCapture, onClose, loading }) => {
   const cameraRef = useRef(null);
 
@@ -49,14 +49,16 @@ const CameraScreen = memo(({ onCapture, onClose, loading }) => {
     <View style={styles.cameraContainer}>
       <CameraView style={StyleSheet.absoluteFillObject} facing="back" ref={cameraRef} />
       
-      {/* Superposición con recuadro claro de enfoque */}
+      {/* Superposición TRANSPARENTE con bordes nítidos de enfoque */}
       <View style={styles.cameraOverlay} pointerEvents="box-none">
-        <View style={styles.cameraPreviewContainer}>
-          <View style={styles.cameraGuideOverlay}>
-            <Text style={styles.cameraGuideText}>
-              Alinea la tabla nutricional aquí
-            </Text>
-          </View>
+        <View style={styles.transparentScanFrame}>
+          <View style={styles.scanGuideCornerTL} />
+          <View style={styles.scanGuideCornerTR} />
+          <View style={styles.scanGuideCornerBL} />
+          <View style={styles.scanGuideCornerBR} />
+          <Text style={styles.transparentGuideText}>
+            Enfocá la tabla nutricional
+          </Text>
         </View>
       </View>
 
@@ -170,11 +172,16 @@ export default function App() {
     setSelectedCategory(cat);
     try {
       const res = await getRanking(cat);
-      if (isMounted.current && res?.success) {
-        setRankingList(res.productos || res.data || []);
+      if (isMounted.current) {
+        if (res?.success) {
+          setRankingList(res.productos || res.data || []);
+        } else {
+          setRankingList([]);
+        }
       }
     } catch (e) {
-      console.log('Error al cargar ranking', e);
+      console.log('Error al cargar ranking:', e);
+      if (isMounted.current) setRankingList([]);
     } finally {
       if (isMounted.current) setLoadingList(false);
     }
@@ -184,11 +191,16 @@ export default function App() {
     setLoadingList(true);
     try {
       const res = await getHistorial();
-      if (isMounted.current && res?.success) {
-        setHistorialList(res.productos || res.data || []);
+      if (isMounted.current) {
+        if (res?.success) {
+          setHistorialList(res.productos || res.data || []);
+        } else {
+          setHistorialList([]);
+        }
       }
     } catch (e) {
-      console.log('Error al cargar historial', e);
+      console.log('Error al cargar historial:', e);
+      if (isMounted.current) setHistorialList([]);
     } finally {
       if (isMounted.current) setLoadingList(false);
     }
@@ -221,7 +233,7 @@ export default function App() {
         }
       }
     } catch (error) {
-      Alert.alert('Error de conexión', 'Verifica la conexión con el servidor Node.js.');
+      Alert.alert('Error de conexión', 'Verifica la IP y conexión con el servidor Node.js.');
     } finally {
       if (isMounted.current) setLoading(false);
     }
@@ -632,40 +644,39 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 12, color: '#64748B', fontWeight: '600' },
   activeTabText: { color: '#0284C7', fontWeight: '700' },
 
-  /* CÁMARA Y MARCO CLARO DE ESCANEO */
+  /* CÁMARA TRANSPARENTE */
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
-  cameraPreviewContainer: {
-    width: '88%',
+  
+  transparentScanFrame: {
+    width: '85%',
     height: 320,
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#2563EB',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 10,
-    elevation: 4,
+    position: 'relative',
   },
-  cameraGuideOverlay: {
-    borderWidth: 2,
-    borderColor: '#3B82F6',
-    borderStyle: 'dashed',
-    borderRadius: 14,
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.65)',
-    paddingHorizontal: 12,
-  },
-  cameraGuideText: {
-    color: '#1E293B',
+  
+  /* ESQUINAS MARCADORAS DE ENFOQUE */
+  scanGuideCornerTL: { position: 'absolute', top: -2, left: -2, width: 24, height: 24, borderTopWidth: 4, borderLeftWidth: 4, borderColor: '#38BDF8', borderTopLeftRadius: 18 },
+  scanGuideCornerTR: { position: 'absolute', top: -2, right: -2, width: 24, height: 24, borderTopWidth: 4, borderRightWidth: 4, borderColor: '#38BDF8', borderTopRightRadius: 18 },
+  scanGuideCornerBL: { position: 'absolute', bottom: -2, left: -2, width: 24, height: 24, borderBottomWidth: 4, borderLeftWidth: 4, borderColor: '#38BDF8', borderBottomLeftRadius: 18 },
+  scanGuideCornerBR: { position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderBottomWidth: 4, borderRightWidth: 4, borderColor: '#38BDF8', borderBottomRightRadius: 18 },
+  
+  transparentGuideText: {
+    color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 14,
-    textAlign: 'center',
+    fontSize: 13,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    overflow: 'hidden',
   },
+
   controlsContainer: {
     position: 'absolute',
     bottom: 30,
