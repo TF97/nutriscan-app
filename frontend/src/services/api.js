@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://192.168.0.17:3000/api/v1';
+const API_BASE_URL = 'http://192.168.0.18:3000/api/v1';
 
 // Escaneo de imagen
 export const scanProductImage = async (base64Image, mimeType = 'image/jpeg') => {

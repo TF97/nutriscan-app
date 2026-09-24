@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   StyleSheet,
   Text,
@@ -8,7 +9,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
-  SafeAreaView,
   StatusBar,
   Modal,
   useWindowDimensions,

@@ -74,8 +74,8 @@ function parseGeminiJson(text) {
 
 // Modelos vigentes de la API de Google Gemini
 const GEMINI_MODELS = [
-  "gemini-3.6-flash",
-  "gemini-3.6-pro"
+  "gemini-1.5-flash",
+  "gemini-1.5-pro"
 ];
 
 function stripDataUrl(image) {
@@ -299,16 +299,12 @@ app.get("/api/v1/productos/ranking", async (req, res) => {
   try {
     const categoria = String(req.query.categoria || "").trim();
 
-    if (!categoria) {
-      return res.status(400).json({
-        error: "Falta el parámetro categoria. Ejemplo: /api/v1/productos/ranking?categoria=Galletitas",
-      });
+    let query = db.collection("productos");
+    if (categoria) {
+      query = query.where("categoria", "==", categoria);
     }
 
-    const snapshot = await db
-      .collection("productos")
-      .where("categoria", "==", categoria)
-      .get();
+    const snapshot = await query.get();
 
     const productos = snapshot.docs
       .map(serializeProducto)
@@ -319,7 +315,8 @@ app.get("/api/v1/productos/ranking", async (req, res) => {
 
     return res.json({
       success: true,
-      categoria,
+      categoria: categoria || "Todas",
+      productos, // Mapeo para el cliente
       ranking: productos,
       masSaludable,
       menosSaludable,
@@ -353,6 +350,7 @@ app.get("/api/v1/productos/historial", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor NutriScan escuchando en http://localhost:${PORT}`);
+// Escuchar en el host '0.0.0.0' para permitir conexiones locales desde dispositivos móviles
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor NutriScan escuchando en http://0.0.0.0:${PORT}`);
 });
