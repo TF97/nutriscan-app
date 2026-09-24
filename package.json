@@ -2,7 +2,7 @@
   "name": "nutriscan-app-root",
   "version": "1.0.0",
   "description": "Orquestador de inicio simultáneo para Frontend y Backend de NutriScan",
-  "main": "index.js",
+  "main": "frontend/App.js",
   "scripts": {
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "dev": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "expo": "~57.0.24"
   }
 }

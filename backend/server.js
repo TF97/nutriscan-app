@@ -25,6 +25,7 @@ Si un valor no figura en la imagen, estimá con criterio nutricional razonable (
 {
   "nombre": "string",
   "categoria": "Galletitas",
+  "texto_tabla_nutricional": "Transcripción textual o resumen descriptivo de los datos, ingredientes y valores visibles en la tabla nutricional.",
   "proteinas_g": 0,
   "calcio_mg": 0,
   "magnesio_mg": 0,
@@ -50,6 +51,7 @@ Si un valor no figura en la imagen, estimá con criterio nutricional razonable (
 
 Reglas:
 - categoria: una categoría corta en español, en singular o plural habitual de góndola. Ejemplos: Galletitas, Mermeladas, Café, Lácteos, Bebidas, Snacks, Cereales, Fiambres, Panificados, Aceites, Condimentos, Otros.
+- texto_tabla_nutricional: Transcribe brevemente el texto principal que detectes en la tabla/rótulo nutricional de la imagen (por ejemplo: "Porción 30g, Valor energético 120kcal, Carbohidratos 20g, Proteínas 2g...").
 - Números en punto decimal, no comas.
 - carbohidratos_simples_g = azúcares / hidratos de carbono simples por 100 g.
 - vitaminas.a_ug y vitaminas.d_ug en microgramos; b_mg y c_mg en miligramos.
@@ -72,8 +74,8 @@ function parseGeminiJson(text) {
 
 // Modelos vigentes de la API de Google Gemini
 const GEMINI_MODELS = [
-  "gemini-3.6-flash",
-  "gemini-3.6-pro"
+  "gemini-1.5-flash",
+  "gemini-1.5-pro"
 ];
 
 function stripDataUrl(image) {
@@ -239,6 +241,8 @@ app.post("/api/v1/scan", async (req, res) => {
 
     const nombre = nutrientes.nombre || "Producto sin nombre";
     const categoria = await asegurarCategoria(nutrientes.categoria || "Otros");
+    const textoTabla = nutrientes.texto_tabla_nutricional || "No se detectó texto nutricional legible.";
+
     const evaluacion = {
       clasificacion: evaluacionCAA.clasificacion,
       color: evaluacionCAA.color,
@@ -259,6 +263,7 @@ app.post("/api/v1/scan", async (req, res) => {
       id: productoId,
       nombre,
       categoria,
+      textoTabla,
       nutrientes,
       evaluacionCAA: evaluacion,
     });
@@ -294,16 +299,12 @@ app.get("/api/v1/productos/ranking", async (req, res) => {
   try {
     const categoria = String(req.query.categoria || "").trim();
 
-    if (!categoria) {
-      return res.status(400).json({
-        error: "Falta el parámetro categoria. Ejemplo: /api/v1/productos/ranking?categoria=Galletitas",
-      });
+    let query = db.collection("productos");
+    if (categoria) {
+      query = query.where("categoria", "==", categoria);
     }
 
-    const snapshot = await db
-      .collection("productos")
-      .where("categoria", "==", categoria)
-      .get();
+    const snapshot = await query.get();
 
     const productos = snapshot.docs
       .map(serializeProducto)
@@ -314,7 +315,8 @@ app.get("/api/v1/productos/ranking", async (req, res) => {
 
     return res.json({
       success: true,
-      categoria,
+      categoria: categoria || "Todas",
+      productos, // Mapeo para el cliente
       ranking: productos,
       masSaludable,
       menosSaludable,
@@ -348,6 +350,7 @@ app.get("/api/v1/productos/historial", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor NutriScan escuchando en http://localhost:${PORT}`);
+// Escuchar en el host '0.0.0.0' para permitir conexiones locales desde dispositivos móviles
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor NutriScan escuchando en http://0.0.0.0:${PORT}`);
 });
