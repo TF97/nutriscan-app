@@ -336,20 +336,19 @@ export default function App() {
       )}
 
       {/* CÁMARA */}
-      {showCamera ? (
-        <CameraScreen
-          onCapture={handleCapturePhoto}
-          onClose={() => setShowCamera(false)}
-          loading={loading}
-        />
-      ) : (
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContainer,
-            { paddingHorizontal: responsivePadding, maxWidth: isTablet ? 700 : '100%', alignSelf: 'center' },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
+      {/* CÁMARA CON VISOR TRANSPARENTE */}
+{showCamera ? (
+  <CameraScreen
+    onCapture={handleCapturePhoto}
+    onClose={() => setShowCamera(false)}
+    loading={loading}
+  />
+) : (
+  <ScrollView
+    style={{ flex: 1 }}
+    contentContainerStyle={[styles.scrollContainer, { paddingHorizontal: responsivePadding }]}
+    showsVerticalScrollIndicator={false}
+  >
           {/* SECCIÓN ESCÁNER */}
           {activeTab === 'escaner' && (
             <View style={styles.sectionContainer}>
@@ -572,7 +571,7 @@ export default function App() {
             </View>
           )}
         </ScrollView>
-      )}
+)}
 
       {/* MODAL ACCIONES */}
       <Modal
@@ -645,8 +644,12 @@ const styles = StyleSheet.create({
   activeTabText: { color: '#0284C7', fontWeight: '700' },
 
   /* CÁMARA TRANSPARENTE */
-  cameraContainer: { flex: 1, backgroundColor: '#000' },
-  cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  cameraContainer: {
+  flex: 1,
+  width: '100%',
+  height: '100%',
+  backgroundColor: '#000000',
+},
   
   transparentScanFrame: {
     width: '85%',
