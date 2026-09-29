@@ -13,6 +13,6 @@
     "concurrently": "^8.2.2"
   },
   "dependencies": {
-    "expo": "~57.0.24"
+    "expo": "~57.0.25"
   }
 }
